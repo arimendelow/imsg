@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SQLITE_PACKAGE=".build/checkouts/SQLite.swift/Package.swift"
+PHONE_NUMBER_BUNDLE=".build/checkouts/PhoneNumberKit/PhoneNumberKit/Bundle+Resources.swift"
 
 if [[ ! -f "$SQLITE_PACKAGE" ]]; then
   exit 0
@@ -21,3 +22,27 @@ if needle in text:
     text = text.replace(needle, replacement)
     path.write_text(text)
 PY
+
+if [[ -f "$PHONE_NUMBER_BUNDLE" ]]; then
+  chmod u+w "$PHONE_NUMBER_BUNDLE" || true
+  python - <<'PY'
+from pathlib import Path
+
+path = Path(".build/checkouts/PhoneNumberKit/PhoneNumberKit/Bundle+Resources.swift")
+text = path.read_text()
+
+updated = False
+if "#if DEBUG && SWIFT_PACKAGE" in text:
+    text = text.replace("#if DEBUG && SWIFT_PACKAGE", "#if SWIFT_PACKAGE")
+    updated = True
+
+needle = "Bundle.main.bundleURL,\n"
+insert = "Bundle.main.bundleURL,\n            Bundle.main.bundleURL.resolvingSymlinksInPath(),\n"
+if "resolvingSymlinksInPath()" not in text and needle in text:
+    text = text.replace(needle, insert)
+    updated = True
+
+if updated:
+    path.write_text(text)
+PY
+fi
