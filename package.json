@@ -10,6 +10,6 @@
     "format": "swift format --in-place --recursive Sources Tests",
     "lint": "swift format lint --recursive Sources Tests && swiftlint",
     "test": "pnpm -s version:sync && pnpm -s deps:patch && swift test",
-    "build": "pnpm -s version:sync && pnpm -s deps:patch && mkdir -p bin && swift build -c release --product imsg && cp .build/release/imsg bin/imsg"
+    "build": "pnpm -s version:sync && pnpm -s deps:patch && mkdir -p bin && swift build -c release --product imsg && cp .build/release/imsg bin/imsg && for bundle in .build/release/*.bundle; do [ -e \"$bundle\" ] || continue; cp -R \"$bundle\" bin/; done"
   }
 }

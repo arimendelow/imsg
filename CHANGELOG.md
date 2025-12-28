@@ -7,7 +7,7 @@
 - feat: Commander-based CLI with SwiftPM build/test workflow
 - feat: event-driven watch using filesystem events (no polling)
 - feat: SQLite.swift + PhoneNumberKit + NSAppleScript integration
-- fix: fallback to raw recipient when PhoneNumberKit resources are unavailable
+- fix: ship PhoneNumberKit resource bundle for CLI installs
 - chore: SwiftLint + swift-format linting
 - change: JSON attachment keys now snake_case
 - deprecation note: `--interval` replaced by `--debounce` (no compatibility)

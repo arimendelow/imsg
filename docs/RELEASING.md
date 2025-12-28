@@ -14,6 +14,7 @@
    - `pnpm lint`
    - `pnpm test`
    - `pnpm format` (optional, if formatting changes are expected)
+   - Verify release zip contains required SwiftPM bundles (e.g. `PhoneNumberKit_PhoneNumberKit.bundle`).
 3. Tag and push
    - `git tag -a vX.Y.Z -m "vX.Y.Z"`
    - `git push origin vX.Y.Z`

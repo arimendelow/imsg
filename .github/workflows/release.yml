@@ -53,7 +53,21 @@ jobs:
         run: |
           mkdir -p dist
           cp .build/release/imsg dist/imsg
-          (cd dist && zip -r imsg-macos.zip imsg)
+          for bundle in .build/release/*.bundle; do
+            if [ -e "$bundle" ]; then
+              cp -R "$bundle" dist/
+            fi
+          done
+          (
+            cd dist
+            shopt -s nullglob
+            bundles=( *.bundle )
+            if [ ${#bundles[@]} -gt 0 ]; then
+              zip -r imsg-macos.zip imsg "${bundles[@]}"
+            else
+              zip -r imsg-macos.zip imsg
+            fi
+          )
 
       - name: Publish release assets
         uses: softprops/action-gh-release@v2
