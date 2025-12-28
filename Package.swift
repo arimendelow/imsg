@@ -29,6 +29,17 @@ let package = Package(
         dependencies: [
             "IMsgCore",
             .product(name: "Commander", package: "Commander"),
+        ],
+        exclude: [
+            "Resources/Info.plist",
+        ],
+        linkerSettings: [
+            .unsafeFlags([
+                "-Xlinker", "-sectcreate",
+                "-Xlinker", "__TEXT",
+                "-Xlinker", "__info_plist",
+                "-Xlinker", "Sources/imsg/Resources/Info.plist",
+            ])
         ]
     ),
         .testTarget(

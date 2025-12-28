@@ -8,6 +8,7 @@
 - feat: event-driven watch using filesystem events (no polling)
 - feat: SQLite.swift + PhoneNumberKit + NSAppleScript integration
 - fix: ship PhoneNumberKit resource bundle for CLI installs
+- fix: embed Info.plist + AppleEvents entitlement for automation prompts
 - chore: SwiftLint + swift-format linting
 - change: JSON attachment keys now snake_case
 - deprecation note: `--interval` replaced by `--debounce` (no compatibility)

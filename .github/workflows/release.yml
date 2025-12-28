@@ -49,6 +49,9 @@ jobs:
       - name: Build
         run: swift build -c release --product imsg
 
+      - name: Codesign
+        run: codesign --force --sign - --entitlements Resources/imsg.entitlements --identifier com.steipete.imsg .build/release/imsg
+
       - name: Package artifact
         run: |
           mkdir -p dist

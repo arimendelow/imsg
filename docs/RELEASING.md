@@ -9,12 +9,13 @@
    - Move entries from `Unreleased` into a new `## X.Y.Z - YYYY-MM-DD` section.
    - Credit contributors (e.g. `thanks @user`).
    - Update `version.env` and `package.json` to `X.Y.Z`.
-   - Run `scripts/generate-version.sh`.
+   - Run `scripts/generate-version.sh` (also refreshes `Sources/imsg/Resources/Info.plist`).
 2. Ensure CI is green on `main`
    - `pnpm lint`
    - `pnpm test`
    - `pnpm format` (optional, if formatting changes are expected)
    - Verify release zip contains required SwiftPM bundles (e.g. `PhoneNumberKit_PhoneNumberKit.bundle`).
+   - Verify `codesign -d --entitlements :-` shows `com.apple.security.automation.apple-events`.
 3. Tag and push
    - `git tag -a vX.Y.Z -m "vX.Y.Z"`
    - `git push origin vX.Y.Z`
