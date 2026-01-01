@@ -33,8 +33,9 @@ struct MessagePayload: Codable {
   let text: String
   let createdAt: String
   let attachments: [AttachmentPayload]
+  let reactions: [ReactionPayload]
 
-  init(message: Message, attachments: [AttachmentMeta]) {
+  init(message: Message, attachments: [AttachmentMeta], reactions: [Reaction] = []) {
     self.id = message.rowID
     self.chatID = message.chatID
     self.sender = message.sender
@@ -42,6 +43,7 @@ struct MessagePayload: Codable {
     self.text = message.text
     self.createdAt = CLIISO8601.format(message.date)
     self.attachments = attachments.map { AttachmentPayload(meta: $0) }
+    self.reactions = reactions.map { ReactionPayload(reaction: $0) }
   }
 
   enum CodingKeys: String, CodingKey {
@@ -52,6 +54,34 @@ struct MessagePayload: Codable {
     case text
     case createdAt = "created_at"
     case attachments
+    case reactions
+  }
+}
+
+struct ReactionPayload: Codable {
+  let id: Int64
+  let type: String
+  let emoji: String
+  let sender: String
+  let isFromMe: Bool
+  let createdAt: String
+
+  init(reaction: Reaction) {
+    self.id = reaction.rowID
+    self.type = reaction.reactionType.name
+    self.emoji = reaction.reactionType.emoji
+    self.sender = reaction.sender
+    self.isFromMe = reaction.isFromMe
+    self.createdAt = CLIISO8601.format(reaction.date)
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case id
+    case type
+    case emoji
+    case sender
+    case isFromMe = "is_from_me"
+    case createdAt = "created_at"
   }
 }
 

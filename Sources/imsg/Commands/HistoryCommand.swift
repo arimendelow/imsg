@@ -52,7 +52,8 @@ enum HistoryCommand {
     if runtime.jsonOutput {
       for message in filtered {
         let attachments = try store.attachments(for: message.rowID)
-        try JSONLines.print(MessagePayload(message: message, attachments: attachments))
+        let reactions = try store.reactions(for: message.rowID)
+        try JSONLines.print(MessagePayload(message: message, attachments: attachments, reactions: reactions))
       }
       return
     }

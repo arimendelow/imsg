@@ -165,6 +165,42 @@ public final class MessageStore: @unchecked Sendable {
     }
   }
 
+  public func reactions(for messageID: Int64) throws -> [Reaction] {
+    // Reactions are stored as messages with associated_message_type in range 2000-2005
+    // They reference the original message via associated_message_guid which matches the guid column
+    let sql = """
+      SELECT r.ROWID, r.associated_message_type, h.id, r.is_from_me, r.date
+      FROM message m
+      JOIN message r ON r.associated_message_guid = m.guid
+      LEFT JOIN handle h ON r.handle_id = h.ROWID
+      WHERE m.ROWID = ?
+        AND r.associated_message_type >= 2000
+        AND r.associated_message_type <= 2005
+      ORDER BY r.date ASC
+      """
+    return try withConnection { db in
+      var reactions: [Reaction] = []
+      for row in try db.prepare(sql, messageID) {
+        let rowID = int64Value(row[0]) ?? 0
+        let typeValue = intValue(row[1]) ?? 0
+        guard let reactionType = ReactionType(rawValue: typeValue) else { continue }
+        let sender = stringValue(row[2])
+        let isFromMe = boolValue(row[3])
+        let date = appleDate(from: int64Value(row[4]))
+        reactions.append(
+          Reaction(
+            rowID: rowID,
+            reactionType: reactionType,
+            sender: sender,
+            isFromMe: isFromMe,
+            date: date,
+            associatedMessageID: messageID
+          ))
+      }
+      return reactions
+    }
+  }
+
   public func attachments(for messageID: Int64) throws -> [AttachmentMeta] {
     let sql = """
       SELECT a.filename, a.transfer_name, a.uti, a.mime_type, a.total_bytes, a.is_sticker
