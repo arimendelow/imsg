@@ -282,6 +282,302 @@ Given the constraints, the options are:
 ## Next Steps
 
 1. ~~Research rich text formatting in iMessage (attributedBody field)~~ ✅ Done
-2. Research how to send tapbacks via AppleScript or other APIs
-3. Decide on approach for formatting (Option A/B/C/D above)
-4. Plan implementation approach for sending tapbacks
+2. ~~Research how to send tapbacks via AppleScript or other APIs~~ ✅ Done (see Phase 2)
+3. ~~Decide on approach for formatting (Option A/B/C/D above)~~ ✅ Decision: Option A (accept plain text only for sending)
+4. ~~Plan implementation approach for sending tapbacks~~ ✅ See Phase 2 below
+
+---
+
+## Phase 2: Implementation Units
+
+Based on research findings, this phase breaks down the remaining work into atomic TDD units.
+
+### Scope Summary
+
+| Feature | Read | Send | Status |
+|---------|------|------|--------|
+| Messages | ✅ | ✅ | Complete |
+| Attachments | ✅ | ✅ | Complete |
+| Tapbacks/Reactions | ✅ | ❓ | Read complete; Send needs research |
+| Text Formatting | ⚠️ | ❌ | Read: enhance parser; Send: NOT FEASIBLE |
+
+**Key Constraints:**
+- Sending formatted text is NOT feasible without private APIs (typedstream encoding issue)
+- Sending tapbacks via AppleScript is UNCERTAIN - needs investigation
+- Focus on reading/displaying formatted text and tapbacks
+
+---
+
+### Unit 3: Tapback Sending Investigation
+
+**Goal:** Determine if AppleScript can send tapbacks, and if so, implement it.
+
+#### Unit 3a: Research AppleScript Tapback Capability
+**Type:** Research (no code)
+**Description:** Investigate whether Messages.app's AppleScript dictionary supports sending reactions/tapbacks.
+
+**Tasks:**
+1. Run `osascript -e 'tell application "Messages" to properties'` to inspect scripting interface
+2. Check Messages.app scripting dictionary in Script Editor (File > Open Dictionary > Messages)
+3. Search for "reaction", "tapback", "like", "love" keywords in the dictionary
+4. Test if there's a way to interact with reactions programmatically
+
+**Acceptance Criteria:**
+- [ ] Document whether AppleScript supports sending tapbacks (yes/no/partial)
+- [ ] If yes, document the exact AppleScript syntax required
+- [ ] If no, document alternative approaches (if any) or mark feature as not implementable
+
+**Dependencies:** None
+**Outcome:** Go/No-Go decision for Units 3b/3c
+
+---
+
+#### Unit 3b: Tapback Send Implementation (CONDITIONAL)
+**Type:** Implementation
+**Description:** Add `TapbackSender` capability to send reactions via AppleScript.
+**Condition:** Only proceed if Unit 3a confirms AppleScript support.
+
+**TDD Phase A: Tests**
+```swift
+// Tests/IMsgCoreTests/TapbackSenderTests.swift
+- test_sendLove_generatesCorrectAppleScript()
+- test_sendLike_generatesCorrectAppleScript()
+- test_sendDislike_generatesCorrectAppleScript()
+- test_sendLaugh_generatesCorrectAppleScript()
+- test_sendEmphasis_generatesCorrectAppleScript()
+- test_sendQuestion_generatesCorrectAppleScript()
+- test_sendCustomEmoji_generatesCorrectAppleScript()
+- test_removeTapback_generatesCorrectAppleScript()
+```
+
+**TDD Phase B: Implementation**
+- Add `TapbackSendOptions` struct in `Sources/IMsgCore/TapbackSender.swift`
+- Add `TapbackSender.send()` method using AppleScript
+- Mirror the `MessageSender` architecture for consistency
+
+**TDD Phase C: Verify**
+- Run all tests, ensure passing
+- Manual integration test with real Messages.app
+
+**Acceptance Criteria:**
+- [ ] All unit tests pass
+- [ ] Can send each standard tapback type (love, like, dislike, laugh, emphasis, question)
+- [ ] Can send custom emoji reactions (if supported)
+- [ ] Can remove tapbacks (if supported)
+- [ ] Follows existing `MessageSender` patterns
+
+**Dependencies:** Unit 3a (must confirm AppleScript support)
+
+---
+
+#### Unit 3c: Tapback CLI Command (CONDITIONAL)
+**Type:** Implementation
+**Description:** Add `imsg tapback` CLI command for sending reactions.
+**Condition:** Only proceed if Unit 3b is completed.
+
+**TDD Phase A: Tests**
+```swift
+// Tests/imsgTests/TapbackCommandTests.swift
+- test_tapbackCommand_requiresMessageGUID()
+- test_tapbackCommand_requiresReactionType()
+- test_tapbackCommand_acceptsValidReactionTypes()
+- test_tapbackCommand_rejectsInvalidReactionType()
+- test_tapbackCommand_outputsJSON_whenFlagSet()
+```
+
+**TDD Phase B: Implementation**
+- Add `Sources/imsg/Commands/TapbackCommand.swift`
+- Command signature: `imsg tapback --message-guid <GUID> --type <love|like|dislike|laugh|emphasis|question|emoji:🎉> [--remove]`
+- Wire into main command group
+
+**TDD Phase C: Verify**
+- Run all tests
+- Manual CLI test with real message
+
+**Acceptance Criteria:**
+- [ ] `imsg tapback --help` shows usage
+- [ ] `imsg tapback --message-guid X --type love` sends love reaction
+- [ ] `imsg tapback --message-guid X --type emoji:🎉` sends custom emoji
+- [ ] `imsg tapback --message-guid X --type love --remove` removes reaction
+- [ ] JSON output mode works correctly
+- [ ] Proper error messages for invalid inputs
+
+**Dependencies:** Unit 3b
+
+---
+
+### Unit 4: Enhanced Formatted Text Reading
+
+**Goal:** Extract and display text formatting attributes (bold/italic/underline/strikethrough) from attributedBody.
+
+#### Unit 4a: Formatting Attribute Discovery
+**Type:** Research
+**Description:** Reverse-engineer iOS 18+ formatting attributes from real attributedBody samples.
+
+**Tasks:**
+1. Find messages with known formatting (bold, italic, etc.) in chat.db
+2. Extract attributedBody BLOBs for analysis
+3. Identify the attribute keys used for formatting (likely `__kIMTextBoldAttribute`, etc.)
+4. Document the binary structure of formatting runs
+
+**Acceptance Criteria:**
+- [ ] Document the exact attribute key names for bold/italic/underline/strikethrough
+- [ ] Document the structure of formatting runs (range format, attribute values)
+- [ ] Create test fixtures from real formatted messages
+- [ ] Determine if formatting data is present in typedstream (may require iOS 18+ sender)
+
+**Dependencies:** None
+**Note:** May require a device running iOS 18+ to send formatted messages to the test database
+
+---
+
+#### Unit 4b: TypedStreamParser Formatting Extraction
+**Type:** Implementation
+**Description:** Enhance `TypedStreamParser` to extract formatting attributes.
+
+**TDD Phase A: Tests**
+```swift
+// Tests/IMsgCoreTests/TypedStreamParserTests.swift
+- test_parseAttributedBody_extractsPlainText() // existing behavior
+- test_parseAttributedBody_extractsBoldRanges()
+- test_parseAttributedBody_extractsItalicRanges()
+- test_parseAttributedBody_extractsUnderlineRanges()
+- test_parseAttributedBody_extractsStrikethroughRanges()
+- test_parseAttributedBody_extractsMultipleFormattingRuns()
+- test_parseAttributedBody_handlesOverlappingFormatting()
+```
+
+**TDD Phase B: Implementation**
+- Add `FormattingRun` struct: `{ range: Range<Int>, attributes: Set<TextAttribute> }`
+- Add `TextAttribute` enum: `.bold, .italic, .underline, .strikethrough`
+- Add `ParsedAttributedBody` struct: `{ text: String, runs: [FormattingRun] }`
+- Add new method `parseAttributedBodyWithFormatting(_ data: Data) -> ParsedAttributedBody`
+- Keep existing `parseAttributedBody()` for backward compatibility
+
+**TDD Phase C: Verify**
+- Run all tests
+- Test with real formatted messages from chat.db
+
+**Acceptance Criteria:**
+- [ ] All unit tests pass
+- [ ] Existing `parseAttributedBody()` behavior unchanged
+- [ ] New method extracts formatting runs correctly
+- [ ] Handles messages without formatting gracefully
+- [ ] Handles partially formatted text (some bold, some plain)
+
+**Dependencies:** Unit 4a (need to know attribute keys)
+
+---
+
+#### Unit 4c: Formatted Text Display
+**Type:** Implementation
+**Description:** Display formatting information in CLI output.
+
+**TDD Phase A: Tests**
+```swift
+// Tests/imsgTests/OutputModelsTests.swift
+- test_messagePayload_includesFormattingRuns_inJSON()
+- test_formattingPayload_encodesCorrectly()
+```
+
+**TDD Phase B: Implementation**
+- Add `FormattingPayload` struct for JSON output
+- Update `MessagePayload` to include optional `formatting` field
+- Update `HistoryCommand` to extract and display formatting (JSON mode)
+- For plain text mode, optionally render with ANSI escape codes or markdown markers
+
+**TDD Phase C: Verify**
+- Run all tests
+- Manual test: `imsg history --chat-id X --json` shows formatting
+
+**Acceptance Criteria:**
+- [ ] JSON output includes `formatting` array when present
+- [ ] Plain text output shows formatting indicators (optional enhancement)
+- [ ] No formatting field when message has no formatting
+- [ ] Backward compatible with existing output format
+
+**Dependencies:** Unit 4b
+
+---
+
+### Unit 5: Human-Readable Tapback Display (Non-JSON)
+
+**Goal:** Show reactions in human-readable format for non-JSON output.
+
+#### Unit 5a: Tapback Display Implementation
+**Type:** Implementation
+**Description:** Add tapback summary to plain-text message output in `HistoryCommand`.
+
+**TDD Phase A: Tests**
+```swift
+// Tests/imsgTests/HistoryCommandDisplayTests.swift
+- test_messageWithReactions_showsReactionSummary()
+- test_messageWithMultipleReactions_groupsByType()
+- test_messageWithNoReactions_showsNoIndicator()
+```
+
+**TDD Phase B: Implementation**
+- Add `--reactions` flag to `HistoryCommand` (or always show if present)
+- Format reactions as: `  reactions: ❤️ (2) 👍 (1) 😂 (John)`
+- Group same reaction types, show count or sender name for single reactions
+
+**TDD Phase C: Verify**
+- Run all tests
+- Manual test with real messages that have reactions
+
+**Acceptance Criteria:**
+- [ ] Reactions displayed below message text
+- [ ] Emoji shown for each reaction type
+- [ ] Count shown when multiple of same type
+- [ ] Sender shown when single reaction of a type
+- [ ] No extra output when message has no reactions
+
+**Dependencies:** None (reactions already fetched in JSON mode)
+
+---
+
+### Implementation Order
+
+```
+Unit 3a (Research: AppleScript tapbacks)
+    │
+    ├─[Yes]─► Unit 3b (TapbackSender) ─► Unit 3c (CLI command)
+    │
+    └─[No]──► Document limitation, skip 3b/3c
+
+Unit 4a (Research: formatting attributes)
+    │
+    └──────► Unit 4b (Parser enhancement) ─► Unit 4c (Display)
+
+Unit 5a (Tapback display) ─► [Can run in parallel with others]
+```
+
+**Recommended Execution Order:**
+1. Unit 3a + Unit 4a + Unit 5a (all research/simple, can parallelize)
+2. Unit 3b (if applicable)
+3. Unit 4b
+4. Unit 3c (if applicable) + Unit 4c (can parallelize)
+
+---
+
+### Risk Assessment
+
+| Risk | Likelihood | Impact | Mitigation |
+|------|------------|--------|------------|
+| AppleScript doesn't support tapbacks | High | Medium | Document limitation, focus on reading |
+| iOS 18 formatting not in local DB | Medium | High | Need device with iOS 18+ sender |
+| Typedstream format changes | Low | Medium | Parser already handles variations |
+| Private attribute keys unknown | Medium | Medium | Reverse engineer from samples |
+
+---
+
+### Definition of Done
+
+Phase 2 is complete when:
+- [ ] Unit 3a research documented (Go/No-Go for tapback sending)
+- [ ] Unit 4a research documented (formatting attribute keys)
+- [ ] Unit 5a implemented (human-readable reaction display)
+- [ ] If Unit 3a passes: Units 3b, 3c implemented and tested
+- [ ] If Unit 4a passes: Units 4b, 4c implemented and tested
+- [ ] All tests pass
+- [ ] Changes committed to branch
