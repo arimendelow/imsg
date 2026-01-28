@@ -123,12 +123,165 @@ public struct Reaction: Sendable, Equatable {
 | Send reactions | ❌ | Not implemented |
 | Rich text formatting | ❌ | Not implemented |
 
+### Unit 1: attributedBody Research (2026-01-28)
+
+#### How does iMessage store formatted text?
+
+iMessage stores formatted message content in the `attributedBody` BLOB column of `chat.db`. This column contains a serialized `NSMutableAttributedString` encoded using Apple's **typedstream** format (NOT binary plist as initially assumed).
+
+**Format identification:**
+```
+$ file attributedBody.blob
+sample: NeXT/Apple typedstream data, little endian, version 4, system 1000
+```
+
+The typedstream format is a binary serialization protocol from NeXTSTEP, used by `NSArchiver`/`NSUnarchiver` (NOT `NSKeyedArchiver`). It's undocumented and specific to Apple's Foundation implementation.
+
+#### typedstream Format Structure
+
+The attributedBody follows this general pattern:
+```
+streamtypedè@NSMutableAttributedStringNSAttributedStringNSObject
+NSMutableStringNSString+-[THE TEXT MESSAGE]iI-
+NSDictionaryi__kIMMessagePartAttributeNameNSNumberNSValue*
+```
+
+**Key structural elements:**
+- Header: version byte (0x04), "streamtyped" literal, system info (0x81 e8 03 = 1000)
+- 0x84: Starts a data blob; following byte indicates length
+- 0x85: Ends class inheritance chains
+- 0x86: Ends data blobs
+- 0x81: Precedes 16-bit integers
+- 0x92+: References to cached archivable objects
+
+**String encoding:**
+- Text follows a type tag (`+` for UTF-8) and length byte
+- Length byte before text: single byte if < 0x81, two bytes (little-endian) if starts with 0x81
+
+#### How are formatting attributes stored?
+
+The `attributedBody` uses NSDictionary structures with range information. Based on BlueBubbles documentation, the structure is:
+
+```json
+{
+  "string": "message text",
+  "runs": [{
+    "range": [startIndex, length],  // NOT [start, end]!
+    "attributes": {
+      "__kIMMessagePartAttributeName": 0,
+      "__kIMMentionConfirmedMention": "contact_address"
+    }
+  }]
+}
+```
+
+**Known attribute keys (private API):**
+- `__kIMMessagePartAttributeName` — Part index for multi-part messages
+- `__kIMMentionConfirmedMention` — @mention data
+- iOS 18+ likely added: text formatting attributes for bold/italic/underline/strikethrough
+- iOS 18+ text effects: Big, Small, Shake, Nod, Explode, Ripple, Bloom, Jitter
+
+**Critical note:** The specific attribute keys for bold/italic/underline (`__kIMTextBoldAttribute`, etc.) are NOT publicly documented. These are private API constants in Apple's IMCore/IMFoundation frameworks.
+
+#### iOS 18 Text Formatting (September 2024)
+
+iOS 18/iPadOS 18/macOS Sequoia introduced native iMessage formatting:
+- **Bold** (Cmd+B)
+- **Italic** (Cmd+I)
+- **Underline** (Cmd+U)
+- **Strikethrough** (Cmd+S)
+- **Text Effects**: Big, Small, Shake, Nod, Explode, Ripple, Bloom, Jitter
+
+**Compatibility requirement:** Both sender AND receiver must be on iOS 18+/macOS Sequoia+. Older versions see plain text.
+
+#### Can Swift encode typedstream without private APIs?
+
+**Short answer: NO — not feasibly.**
+
+**Reasons:**
+1. `NSArchiver` (which produces typedstream) is **deprecated** since macOS 10.13 and **never available on iOS**
+2. The typedstream format is **undocumented** — only discoverable via reverse engineering
+3. Apple's modern archiver is `NSKeyedArchiver` which produces binary plist, NOT typedstream
+4. Writing typedstream from scratch would require reimplementing Apple's proprietary serialization
+
+**The fundamental problem:**
+- iMessage's `attributedBody` expects typedstream format
+- Swift/public APIs only provide `NSKeyedArchiver` (binary plist)
+- There's no public API to produce typedstream-format data
+
+#### Alternative approaches investigated
+
+1. **AppleScript** — Cannot send styled/formatted text. The Messages.app scripting dictionary doesn't expose text formatting properties. Only plain text strings can be sent.
+
+2. **Private APIs (requires SIP disabled):**
+   - **BlueBubbles Private API** — Hooks into IMCore to send tapbacks and typing indicators. Requires disabling System Integrity Protection. Does support mentions via attributedBody.
+   - **Barcelona** (beeper/barcelona) — Swift framework that interfaces with Apple's private IM frameworks via reverse engineering. Used by mautrix-imessage bridge. Requires SIP disabled.
+
+3. **Direct database writes** — NOT possible. Messages.app reads from chat.db but doesn't re-read it for sending. Writing to the DB wouldn't trigger a send.
+
+#### Existing Libraries/Tools
+
+**For READING attributedBody:**
+
+| Library | Language | Notes |
+|---------|----------|-------|
+| [crabstep](https://github.com/ReagentX/crabstep) | Rust | Pure Rust typedstream deserializer |
+| [imessage-database](https://github.com/ReagentX/imessage-exporter) | Rust | Full iMessage DB parser, uses crabstep |
+| [python-typedstream](https://github.com/dgelessus/python-typedstream) | Python | Cross-platform typedstream reader |
+| imsg's TypedStreamParser.swift | Swift | Already in this project |
+
+**For SENDING with private APIs (SIP disabled):**
+
+| Library | Language | Notes |
+|---------|----------|-------|
+| [BlueBubbles Helper](https://github.com/BlueBubblesApp/bluebubbles-helper) | Obj-C | Hooks IMCore, supports tapbacks/mentions |
+| [Barcelona](https://github.com/beeper/barcelona) | Swift | Full iMessage framework, used by Beeper |
+
+**For SENDING (public APIs only):**
+
+| Library | Language | Notes |
+|---------|----------|-------|
+| [imessage-kit](https://github.com/photon-hq/imessage-kit) | TypeScript | AppleScript-based, plain text only |
+
+#### Key Findings Summary
+
+1. **attributedBody encoding is NOT feasible in pure Swift** without private APIs
+2. **iMessage expects typedstream format** which cannot be produced by public Swift APIs
+3. **NSArchiver is deprecated/unavailable** — modern `NSKeyedArchiver` produces incompatible format
+4. **iOS 18 added formatting** but the attribute keys are private/undocumented
+5. **Private API solutions exist** (BlueBubbles, Barcelona) but require SIP disabled
+6. **AppleScript cannot send formatted text** — only plain text strings
+
+#### Recommended Approach for imsg
+
+Given the constraints, the options are:
+
+**Option A: Accept plain text only (recommended for now)**
+- Continue using AppleScript for sending
+- Focus on READING formatted text from attributedBody (already works)
+- Document that sending formatted text is not supported
+
+**Option B: Markdown-style syntax (user-facing only)**
+- Accept `**bold**`, `*italic*`, `` `code` `` in CLI input
+- Store/display with markers, but send as plain text
+- Receiver sees the markers (like Discord/Slack without rendering)
+
+**Option C: Private API integration (requires SIP disabled)**
+- Integrate BlueBubbles helper or Barcelona
+- Would enable full formatting AND tapback sending
+- Significant complexity, security implications, maintenance burden
+
+**Option D: Wait for Apple**
+- Apple may eventually expose formatting APIs publicly
+- iOS 18 is the first version with formatting; APIs might evolve
+
 ## Decisions
 
-(To be filled in as work progresses)
+**2026-01-28:** Based on Unit 1 research, sending formatted text via public APIs is not feasible. The attributedBody uses undocumented typedstream format that cannot be produced without private APIs.
 
 ## Next Steps
 
-1. Research how to send tapbacks via AppleScript or other APIs
-2. Research rich text formatting in iMessage (attributedBody field)
-3. Plan implementation approach for sending tapbacks
+1. ~~Research rich text formatting in iMessage (attributedBody field)~~ ✅ Done
+2. Research how to send tapbacks via AppleScript or other APIs
+3. Decide on approach for formatting (Option A/B/C/D above)
+4. Plan implementation approach for sending tapbacks
